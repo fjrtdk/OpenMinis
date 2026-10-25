@@ -19,7 +19,7 @@ class AgentCommWakeDebouncer(
     private val clock: WakeClock,
     val quietMs: Long = 2_000L,
     val maxWaitMs: Long = 10_000L,
-    val minIntervalMs: Long = 30_000L
+    val minIntervalMs: Long = 60_000L
 ) {
     private var firstPendingAt: Long? = null
     private var lastPendingAt: Long? = null

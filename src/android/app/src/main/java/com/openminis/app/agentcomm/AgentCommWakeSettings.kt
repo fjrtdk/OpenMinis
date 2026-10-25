@@ -16,6 +16,7 @@ object AgentCommWakeSettings {
     private const val PREFS_NAME = "agent_comm_wake"
     private const val KEY_ENABLED = "enabled"
     private const val KEY_ALLOWED_SENDERS = "allowed_senders"
+    private const val KEY_SESSION_ID = "wake_session_id"
 
     internal const val DEFAULT_ALLOWED_SENDERS = "wolfie"
     private const val CHANNEL = "rebelarmy"
@@ -36,6 +37,13 @@ object AgentCommWakeSettings {
 
     fun setAllowedSenders(ctx: Context, raw: String) {
         prefs(ctx).edit().putString(KEY_ALLOWED_SENDERS, raw).apply()
+    }
+
+    /** Chat session that wakes are appended to (an id, not secret); null until the first wake. */
+    fun wakeSessionId(ctx: Context): String? = prefs(ctx).getString(KEY_SESSION_ID, null)
+
+    fun setWakeSessionId(ctx: Context, id: String?) {
+        prefs(ctx).edit().apply { if (id == null) remove(KEY_SESSION_ID) else putString(KEY_SESSION_ID, id) }.apply()
     }
 
     /** Parsed allowlist: trimmed, lower-cased, non-blank. Empty means nobody can wake. */

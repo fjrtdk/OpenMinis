@@ -31,8 +31,11 @@ class AgentCommWakeFilter(private val config: WakeFilterConfig) {
 
     private val allowedSenders: Set<String> = config.allowedSenders.mapTo(HashSet()) { it.trim().lowercase() }
     private var snapshotReceived = false
-    private val agentIdToName = mutableMapOf<String, String>()
     private val channelIdToName = mutableMapOf<String, String>()
+
+    /** Agent ids allowed to wake, fixed by the FIRST snapshot. Later renames cannot add or remove ids. */
+    private val pinnedAllowedIds = HashSet<String>()
+    private val pinnedSelfIds = HashSet<String>()
     private val seenIds = LinkedHashSet<Long>()
 
     /**
@@ -44,11 +47,11 @@ class AgentCommWakeFilter(private val config: WakeFilterConfig) {
         if (!frame.isState) return 0
 
         if (!frame.isDelta) {
-            // Snapshot: replace maps, seed seen-ids, never wake.
-            agentIdToName.clear()
-            channelIdToName.clear()
-            for (a in frame.agents) agentIdToName[a.id] = a.name
-            for (c in frame.channels) channelIdToName[c.id] = c.name
+            // Snapshot: never wakes, only seeds seen ids. Only the FIRST snapshot pins
+            // identities; a later one cannot change who is trusted (the filter is
+            // per-connection, so a reconnect starts again from a fresh first snapshot).
+            if (!snapshotReceived) pinIdentities(frame.agents)
+            for (c in frame.channels) channelIdToName.putIfAbsent(c.id, c.name)
             for (m in frame.messages) addSeen(m.id)
             snapshotReceived = true
             return 0
@@ -57,9 +60,9 @@ class AgentCommWakeFilter(private val config: WakeFilterConfig) {
         // Delta before any snapshot → fail closed.
         if (!snapshotReceived) return 0
 
-        // Update maps from delta (merge, not replace).
-        for (a in frame.agents) agentIdToName[a.id] = a.name
-        for (c in frame.channels) channelIdToName[c.id] = c.name
+        // Deltas only add unknown channels. They never rename a known channel, never
+        // change agent identities and never add trusted ids (that needs a reconnect).
+        for (c in frame.channels) channelIdToName.putIfAbsent(c.id, c.name)
 
         var wakeCount = 0
         for (m in frame.messages) {
@@ -74,7 +77,8 @@ class AgentCommWakeFilter(private val config: WakeFilterConfig) {
     @Synchronized
     fun reset() {
         snapshotReceived = false
-        agentIdToName.clear()
+        pinnedAllowedIds.clear()
+        pinnedSelfIds.clear()
         channelIdToName.clear()
         seenIds.clear()
     }
@@ -84,14 +88,27 @@ class AgentCommWakeFilter(private val config: WakeFilterConfig) {
         val chanName = channelIdToName[msg.channelId] ?: return false
         if (!chanName.equals(config.channelName, ignoreCase = true)) return false
 
-        // Sender check
-        val senderName = agentIdToName[msg.fromAgent] ?: return false
-        if (senderName.equals(config.selfAgentName, ignoreCase = true)) return false
-
-        // Allowlist: empty allows nobody. Self is excluded above even if listed.
-        if (senderName.lowercase() !in allowedSenders) return false
+        // Sender check: by pinned id, not by the current (renamable) name.
+        if (msg.fromAgent in pinnedSelfIds) return false
+        if (msg.fromAgent !in pinnedAllowedIds) return false
 
         return true
+    }
+
+    /**
+     * Trust is decided once, by id. A name shared by two agents (compared
+     * case-insensitively) is ambiguous and trusts neither, so nobody can
+     * impersonate an allowed sender with a look-alike name.
+     */
+    private fun pinIdentities(agents: List<FeedAgent>) {
+        val byName = agents.groupBy { it.name.trim().lowercase() }
+        for ((name, group) in byName) {
+            if (name == config.selfAgentName.trim().lowercase()) {
+                group.forEach { pinnedSelfIds.add(it.id) }
+            } else if (name in allowedSenders && group.size == 1) {
+                pinnedAllowedIds.add(group[0].id)
+            }
+        }
     }
 
     private fun addSeen(id: Long) {

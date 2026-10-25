@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,6 +24,9 @@ fun AgentCommWakeSettingsSection() {
     val context = LocalContext.current
     var enabled by remember { mutableStateOf(AgentCommWakeSettings.isEnabled(context)) }
     var senders by remember { mutableStateOf(AgentCommWakeSettings.allowedSendersRaw(context)) }
+
+    // If the OS stopped the listener (Android 15 dataSync cap), opening this screen restarts it.
+    LaunchedEffect(Unit) { AgentCommWakeService.start(context) }
 
     Column {
         Text(

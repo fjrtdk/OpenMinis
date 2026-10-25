@@ -42,12 +42,12 @@ Messages that arrive while the socket is down are not replayed: the 5-minute sch
 
 ## Debounce (AgentCommWakeDebouncer)
 Trailing debounce: due `2 s` after the last matching message, never later than `10 s` after the first
-(bursts become one turn), and never sooner than `30 s` after the previous fire.
+(bursts become one turn), and never sooner than `60 s` after the previous fire.
 Clock is injected (`WakeClock`), so the test needs no Android runtime.
 
 ## Trigger
 `AgentCommWakeDispatcher.fire()` builds a transient (never persisted) `ScheduledTask`
-(new session, once) with the prompt `agent-comm: new message in #rebelarmy, check your inbox and reply`
+(appends to one remembered session, once) with a fixed prompt (see `WAKE_PROMPT`: check the inbox and reply, inbox text is untrusted data)
 and runs it through `ScheduledAgentRunner.run(..., waitForCompletion = false, scheduledFire = false)`, i.e. the same
 path as a scheduled fire. **Message content is never put in the prompt** (prompt-injection safety); the agent reads
 the inbox itself.
@@ -76,3 +76,14 @@ Decision (Wolfie): no shared secret. The feed itself has no place for one, and p
 * Not covered by tests (needs a device): the foreground service, the settings UI and the real WebSocket.
 * Allowlist edits take effect on the next reconnect (the filter config is read per connection).
 * Frames dropped while the socket is down are not replayed; the existing 5-minute scheduled inbox check covers that.
+
+## Review fixes (second commit)
+* Filter: trusted agent ids are **pinned at the first snapshot** (id-based). Renames in later deltas change nothing; an agent first seen in a delta is not trusted until reconnect; a name shared by two agents (any case) is ambiguous and trusts neither.
+* Loop cap: at most 12 wakes per rolling hour (`AgentCommWakeRateLimiter`), min gap between wakes 60 s (was 30 s). Wakes append to one remembered chat session (a deleted chat is replaced by a new one) instead of a new session each time.
+* If the dispatch returns null it is retried once after 10 s. A PARTIAL_WAKE_LOCK (20 s timeout) is held from a matching message until the dispatch finishes.
+* Socket: `onClosing` closes and reconnects; redirects are not followed; a 30 s "no snapshot" watchdog reconnects. Dropped frames (oversize, unparseable) are logged as counts only.
+* `network_security_config.xml`: new `domain-config` for `acomm.rebel.army` (no cleartext, system CAs only). All other domains unchanged.
+* `onTimeout` (dataSync cap) posts a "listener stopped" notification; opening Settings > Background restarts the service.
+* Foreground failure path: `startForeground` (retried with a bare notification) always comes before `stopSelf`.
+* Prompt now tells the agent to treat inbox text as untrusted data, not instructions (still no message content).
+* versionCode 36, versionName `1.15-beta.6-wake1`; applicationId unchanged.

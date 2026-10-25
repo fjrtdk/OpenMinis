@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 
 class AgentCommWakeHookTest {
@@ -197,13 +198,13 @@ class AgentCommWakeHookTest {
     }
 
     @Test
-    fun `second snapshot re-seeds and old id in later delta does not wake`() {
+    fun `second snapshot seeds more ids and a re-sent id does not wake`() {
         val filter = AgentCommWakeFilter(WakeFilterConfig())
         filter.onFrame(AgentCommFrameParser.parse(snapshotJson())!!)
         // Second snapshot with different messages
         val snap2 = """{"type":"state","agents":[{"id":"$agentIdSelf","name":"openminis"},{"id":"$agentIdWolfie","name":"wolfie"}],"channels":[{"id":"$channelIdRebel","name":"rebelarmy"}],"messages":[{"id":100,"channel_id":"$channelIdRebel","from_agent":"$agentIdWolfie","content":"reconnect"}]}"""
         assertEquals(0, filter.onFrame(AgentCommFrameParser.parse(snap2)!!))
-        // Old id 1 from first snapshot was replaced; but id 100 is now seeded
+        // A later snapshot only adds to the seen set (it never clears it); id 100 is now seeded
         val delta = AgentCommFrameParser.parse(deltaJson(100, channelIdRebel, agentIdWolfie, "reconnect"))!!
         assertEquals(0, filter.onFrame(delta))
     }
@@ -313,5 +314,114 @@ class AgentCommWakeHookTest {
     }
 
     // endregion
-}
 
+    // region Review-fix tests
+
+    private fun snap(agents: String, msgs: String = "") =
+        AgentCommFrameParser.parse(
+            """{"type":"state","agents":[$agents],"channels":[{"id":"$channelIdRebel","name":"rebelarmy"}],"messages":[$msgs]}""",
+        )!!
+
+    private fun agentJson(id: String, name: String) = """{"id":"$id","name":"$name"}"""
+
+    @Test
+    fun `parseSenders splits trims lowercases and drops blanks`() {
+        assertEquals(setOf("wolfie", "scout", "a b"), AgentCommWakeSettings.parseSenders(" Wolfie, scout;\nA B ,, ;"))
+        assertEquals(emptySet<String>(), AgentCommWakeSettings.parseSenders(" , ;\n "))
+        assertEquals(setOf("wolfie"), AgentCommWakeSettings.parseSenders(AgentCommWakeSettings.DEFAULT_ALLOWED_SENDERS))
+    }
+
+    @Test
+    fun `two agents with the same name in different case wake nobody`() {
+        val filter = AgentCommWakeFilter(WakeFilterConfig())
+        filter.onFrame(snap(agentJson(agentIdSelf, "openminis") + "," + agentJson(agentIdWolfie, "wolfie") + "," + agentJson(agentIdUnknown, "WOLFIE")))
+        assertEquals(0, filter.onFrame(AgentCommFrameParser.parse(deltaJson(10, channelIdRebel, agentIdWolfie, "x"))!!))
+        assertEquals(0, filter.onFrame(AgentCommFrameParser.parse(deltaJson(11, channelIdRebel, agentIdUnknown, "x"))!!))
+    }
+
+    @Test
+    fun `renaming an agent in a delta does not add trust`() {
+        val filter = AgentCommWakeFilter(WakeFilterConfig())
+        filter.onFrame(AgentCommFrameParser.parse(snapshotJson())!!)
+        // Scout is renamed to wolfie by a presence delta, then posts.
+        filter.onFrame(AgentCommFrameParser.parse("""{"type":"state","delta":true,"agents":[{"id":"$agentIdScout","name":"wolfie"}]}""")!!)
+        assertEquals(0, filter.onFrame(AgentCommFrameParser.parse(deltaJson(20, channelIdRebel, agentIdScout, "x"))!!))
+    }
+
+    @Test
+    fun `renaming the allowed agent in a delta does not remove it, id stays pinned`() {
+        val filter = AgentCommWakeFilter(WakeFilterConfig())
+        filter.onFrame(AgentCommFrameParser.parse(snapshotJson())!!)
+        filter.onFrame(AgentCommFrameParser.parse("""{"type":"state","delta":true,"agents":[{"id":"$agentIdWolfie","name":"other"}]}""")!!)
+        assertEquals(1, filter.onFrame(AgentCommFrameParser.parse(deltaJson(21, channelIdRebel, agentIdWolfie, "x"))!!))
+    }
+
+    @Test
+    fun `self cannot be unpinned by renaming in a delta`() {
+        val filter = AgentCommWakeFilter(WakeFilterConfig(allowedSenders = setOf("wolfie", "openminis")))
+        filter.onFrame(AgentCommFrameParser.parse(snapshotJson())!!)
+        filter.onFrame(AgentCommFrameParser.parse("""{"type":"state","delta":true,"agents":[{"id":"$agentIdSelf","name":"wolfie"}]}""")!!)
+        assertEquals(0, filter.onFrame(AgentCommFrameParser.parse(deltaJson(22, channelIdRebel, agentIdSelf, "x"))!!))
+    }
+
+    @Test
+    fun `agent first seen in a delta is not trusted until reconnect`() {
+        val filter = AgentCommWakeFilter(WakeFilterConfig(allowedSenders = setOf("wolfie", "newbie")))
+        filter.onFrame(AgentCommFrameParser.parse(snapshotJson())!!)
+        filter.onFrame(AgentCommFrameParser.parse("""{"type":"state","delta":true,"agents":[{"id":"$agentIdUnknown","name":"newbie"}]}""")!!)
+        assertEquals(0, filter.onFrame(AgentCommFrameParser.parse(deltaJson(23, channelIdRebel, agentIdUnknown, "x"))!!))
+    }
+
+    @Test
+    fun `rate limiter allows maxPerHour then blocks until the hour rolls`() {
+        var t = 0L
+        val limiter = AgentCommWakeRateLimiter(WakeClock { t }, maxPerHour = 3)
+        repeat(3) { assertTrue(limiter.tryAcquire()); t += 1000 }
+        assertFalse(limiter.tryAcquire())
+        t = AgentCommWakeRateLimiter.HOUR_MS - 1
+        assertFalse(limiter.tryAcquire()) // first wake (t=0) not yet an hour old
+        t = AgentCommWakeRateLimiter.HOUR_MS
+        assertTrue(limiter.tryAcquire()) // t=0 wake expired, one slot free
+        assertFalse(limiter.tryAcquire())
+    }
+
+    @Test
+    fun `default debounce interval is longer than before`() {
+        var t = 0L
+        val d = AgentCommWakeDebouncer(WakeClock { t })
+        d.offer(); t = 2000; assertTrue(d.takeIfDue())
+        d.offer(); t = 2000 + 10_000
+        assertFalse(d.takeIfDue())
+        t = 2000 + 60_000
+        assertTrue(d.takeIfDue())
+    }
+
+    @Test
+    fun `fire returning null is retried once after the delay`() = runBlocking {
+        var calls = 0
+        val sleeps = mutableListOf<Long>()
+        val r = fireWithOneRetry(10_000, { sleeps += it }) { calls++; if (calls == 1) null else "sid" }
+        assertEquals("sid", r)
+        assertEquals(2, calls)
+        assertEquals(listOf(10_000L), sleeps)
+    }
+
+    @Test
+    fun `fire succeeding first time is not retried and failing twice stops`() = runBlocking {
+        var calls = 0
+        assertEquals("ok", fireWithOneRetry(10_000, { }) { calls++; "ok" })
+        assertEquals(1, calls)
+        calls = 0
+        assertNull(fireWithOneRetry(10_000, { }) { calls++; null })
+        assertEquals(2, calls)
+    }
+
+    @Test
+    fun `wake prompt marks inbox text untrusted and carries no message content`() {
+        val p = AgentCommWakeDispatcher.WAKE_PROMPT
+        assertTrue(p.contains("untrusted"))
+        assertTrue(p.contains("not instructions"))
+    }
+
+    // endregion
+}
