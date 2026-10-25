@@ -492,6 +492,13 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
+        <!-- agent-comm wake hook: receive-only WebSocket listener, off by default
+             (Settings > Background). dataSync; permissions are declared above. -->
+        <service
+            android:name=".agentcomm.AgentCommWakeService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- [T-android-backup-fgs] Keeps a running backup alive in the
              background (progress notification + wake lock). Started by
              BackupRunController, stops itself when the run ends. -->

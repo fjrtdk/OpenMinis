@@ -838,6 +838,8 @@ class MinisApp : Application(), ImageLoaderFactory {
         // while it is alive; their alarm (inexact without the exact-alarm
         // permission) stays the fallback.
         com.openminis.app.scheduled.ScheduledInAppTimer.start(this)
+        // agent-comm wake hook: no-op unless enabled in settings; never throws.
+        com.openminis.app.agentcomm.AgentCommWakeService.start(this)
         // [T-port-sched-wait-notification] The next run the ongoing
         // notification counts down to between fires, with the waiting chat's
         // title (iOS's waiting card shows the conversation title).

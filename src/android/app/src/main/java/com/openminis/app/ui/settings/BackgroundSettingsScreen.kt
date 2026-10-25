@@ -333,6 +333,8 @@ fun BackgroundSettingsScreen(onBack: () -> Unit) {
             }
 
             Spacer(Modifier.size(16.dp))
+            com.openminis.app.agentcomm.AgentCommWakeSettingsSection()
+            Spacer(Modifier.size(16.dp))
         }
     }
 }
