@@ -2845,6 +2845,21 @@ class ProviderRepository(private val context: Context) {
                                 }
                         }
                     }
+                    // Magpie: OpenAI-compatible GET {base}/models with Bearer
+                    // auth. Confirmed 200 with a key, 401 without. Prefer the
+                    // preset default and fallback at the front of a live list.
+                    ProviderType.magpie ->
+                        com.openminis.app.provider.openai.OpenAIModelsApi.fetchModelsDetailed(
+                            apiKey,
+                            baseURL ?: com.openminis.app.provider.magpie.MagpieGateway.DEFAULT_BASE_URL,
+                            customUserAgent = instance.customUserAgent,
+                            netTag = netTag,
+                        )
+                            .also { r -> r.error?.let(reportVendorError) }
+                            .models
+                            .map { it.copy(provider = "Magpie") }
+                            .let { com.openminis.app.provider.magpie.MagpieGateway.preferBuiltIns(it) }
+                            .ifEmpty { com.openminis.app.provider.magpie.MagpieGateway.builtInModels }
                     // [T-android-provider-type-parity] No models endpoint to
                     // query for a type this build cannot drive; the instance
                     // keeps whatever entries the restore brought with it.
@@ -3125,6 +3140,7 @@ class ProviderRepository(private val context: Context) {
             // [T-copilot-provider] No /v1 suffix — Copilot serves
             // /chat/completions and /models straight off the API root.
             ProviderType.githubCopilot -> com.openminis.app.auth.CopilotDeviceFlow.API_BASE
+            ProviderType.magpie -> com.openminis.app.provider.magpie.MagpieGateway.DEFAULT_BASE_URL
             // No canonical host for a type this build cannot drive. Callers
             // reaching here have already exhausted effectiveBaseURL.
             ProviderType.antigravity, ProviderType.unsupported -> "https://api.openai.com/v1"

@@ -213,6 +213,7 @@ internal object ProviderMutationMethods {
             ProviderType.xAI -> "https://api.x.ai/v1"
             ProviderType.kimiCode -> "https://api.kimi.com/coding/v1"
             ProviderType.githubCopilot -> com.openminis.app.auth.CopilotDeviceFlow.API_BASE
+            ProviderType.magpie -> com.openminis.app.provider.magpie.MagpieGateway.DEFAULT_BASE_URL
             ProviderType.antigravity, ProviderType.unsupported -> ""
         }
         val probeURL = when (instance.providerType) {
@@ -227,6 +228,7 @@ internal object ProviderMutationMethods {
             ProviderType.kimiCode -> if (baseURL.endsWith("/v1")) "$baseURL/models" else "$baseURL/v1/models"
             // [T-copilot-provider] /models sits at the API root, no /v1.
             ProviderType.githubCopilot -> "$baseURL/models"
+            ProviderType.magpie -> "$baseURL/models"
             // No probe endpoint for a type this build cannot drive.
             ProviderType.antigravity, ProviderType.unsupported -> baseURL
         }
@@ -254,6 +256,7 @@ internal object ProviderMutationMethods {
             // run the exchange, so this one is left unauthenticated and is
             // expected to 401; Quick Test is the real check.
             ProviderType.githubCopilot -> { /* session token not available here */ }
+            ProviderType.magpie -> if (!key.isNullOrEmpty()) builder.header("Authorization", "Bearer $key")
             // [T-android-provider-type-parity] No auth scheme known for a type
             // this build cannot drive; the probe will simply fail.
             ProviderType.antigravity, ProviderType.unsupported -> { /* no auth */ }

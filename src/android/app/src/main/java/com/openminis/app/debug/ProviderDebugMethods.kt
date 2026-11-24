@@ -88,6 +88,7 @@ internal object ProviderDebugMethods {
         // [T-android-provider-type-parity] Responses API shares the OpenAI
         // host; undrivable types have no canonical base to report.
         ProviderType.openAIResponses -> "https://api.openai.com"
+        ProviderType.magpie -> com.openminis.app.provider.magpie.MagpieGateway.DEFAULT_BASE_URL
         ProviderType.antigravity, ProviderType.unsupported -> ""
     }
 

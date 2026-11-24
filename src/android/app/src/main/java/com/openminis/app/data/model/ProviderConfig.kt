@@ -74,7 +74,14 @@ enum class ProviderType(val displayName: String) {
      * Never write this back as an instance's type where the original string is
      * still available; it is a read-side fallback, not a real provider.
      */
-    unsupported("Unsupported");
+    unsupported("Unsupported"),
+
+    /**
+     * Magpie OpenAI-compatible gateway. API-key auth, editable base URL
+     * defaulting to [com.openminis.app.provider.magpie.MagpieGateway.DEFAULT_BASE_URL].
+     * Appended at the end so existing ordinals stay stable.
+     */
+    magpie("Magpie");
 
     /**
      * [T-android-provider-type-parity] True for types this build can decode and
@@ -87,7 +94,7 @@ enum class ProviderType(val displayName: String) {
             // openAIResponses included: it routes through the OpenAI provider
             // with the Responses endpoint forced on.
             anthropic, gemini, openAI, openRouter, xAI, kimiCode, openAIResponses,
-            githubCopilot -> true
+            githubCopilot, magpie -> true
             antigravity, unsupported -> false
         }
 
@@ -99,6 +106,7 @@ enum class ProviderType(val displayName: String) {
             openRouter -> LLMModel.allOpenRouter
             xAI -> LLMModel.allXAI
             kimiCode -> LLMModel.allKimi
+            magpie -> com.openminis.app.provider.magpie.MagpieGateway.builtInModels
             // No built-in catalog for the decode-only types; models restored
             // alongside the instance still appear as custom entries.
             // [T-copilot-provider] Copilot's catalog is fetched live from

@@ -1410,6 +1410,7 @@ class ModelUseOffloadHandler(
             ProviderType.githubCopilot,
             // [T-android-provider-type-parity] No image-param hint for types
             // this build cannot drive.
+            ProviderType.magpie,
             ProviderType.antigravity, ProviderType.unsupported, null -> ""
         }
     }
