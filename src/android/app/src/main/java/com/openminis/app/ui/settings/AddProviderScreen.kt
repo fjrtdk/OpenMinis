@@ -73,6 +73,7 @@ import com.openminis.app.auth.OpenRouterOAuthManager
 import com.openminis.app.data.model.ProviderCredential
 import com.openminis.app.data.model.ProviderInstance
 import com.openminis.app.data.model.ProviderType
+import com.openminis.app.provider.magpie.MagpieGateway
 import com.openminis.app.data.repository.ProviderRepository
 import com.openminis.app.R
 import kotlinx.coroutines.launch
@@ -186,6 +187,7 @@ private val providerDisplayOrder = listOf(
     ProviderType.xAI,
     ProviderType.kimiCode,
     ProviderType.openRouter,
+    ProviderType.magpie,
 )
 
 // [T-copilot-provider] Copilot is appended to `providerDisplayOrder` at the
@@ -206,6 +208,7 @@ private fun providerIcon(type: ProviderType): Pair<ImageVector, Color> = when (t
     ProviderType.kimiCode -> Icons.Default.Terminal to Color(0xFF5C6BC0)
     // [T-copilot-provider] GitHub purple.
     ProviderType.githubCopilot -> Icons.Default.Terminal to Color(0xFF6E5494)
+    ProviderType.magpie -> Icons.Default.Cloud to Color(0xFF00897B)
     // [T-android-provider-type-parity] Types that arrive only from an iOS
     // package / newer build; never offered in addableProviderTypes, but the
     // icon helper is also used to render an already-restored instance.
@@ -240,6 +243,9 @@ private fun availableCredentials(type: ProviderType): List<ProviderCredential> {
         // screen never offers them for creation anyway.
         ProviderType.antigravity,
         ProviderType.unsupported -> listOf(ProviderCredential.apiKey)
+        // Magpie is a self-hosted OpenAI-compatible gateway: a user-entered
+        // Bearer key, no OAuth.
+        ProviderType.magpie -> listOf(ProviderCredential.apiKey)
     }
 }
 
@@ -286,6 +292,7 @@ private fun ChooseProviderScreen(
                     ProviderType.xAI -> "xAI (Grok)"
                     ProviderType.kimiCode -> "Kimi Code"
                     ProviderType.githubCopilot -> "GitHub Copilot"
+                    ProviderType.magpie -> "Magpie"
                     // [T-android-provider-type-parity] Fall back to the enum's
                     // own display name for types this screen doesn't curate.
                     ProviderType.openAIResponses,
@@ -302,6 +309,7 @@ private fun ChooseProviderScreen(
                     ProviderType.xAI -> R.string.add_provider_subtitle_xai
                     ProviderType.kimiCode -> R.string.add_provider_subtitle_kimi
                     ProviderType.githubCopilot -> R.string.add_provider_subtitle_copilot
+                    ProviderType.magpie -> R.string.add_provider_subtitle_magpie
                     // [T-android-provider-type-parity] Not offered for
                     // creation; reuse the OpenAI copy for the Responses API and
                     // a generic line for the undrivable types.
@@ -412,6 +420,7 @@ private fun apiKeyDescription(type: ProviderType): String = when (type) {
     ProviderType.openAIResponses -> "Supports the OpenAI Responses API and compatible endpoints"
     ProviderType.antigravity,
     ProviderType.unsupported -> "This provider type is not supported on Android"
+    ProviderType.magpie -> "Use a Magpie gateway API key (Authorization: Bearer)"
 }
 
 private fun oauthDescription(type: ProviderType): String = when (type) {
@@ -425,6 +434,7 @@ private fun oauthDescription(type: ProviderType): String = when (type) {
     ProviderType.openAIResponses -> "Sign in with OpenAI Codex"
     ProviderType.antigravity,
     ProviderType.unsupported -> "This provider type is not supported on Android"
+    ProviderType.magpie -> "Magpie does not use OAuth; add it with an API key"
 }
 
 // -- Step 3: Configure & Save --
@@ -471,7 +481,12 @@ private fun ConfigureProviderScreen(
         if (!labelEdited) label = defaultLabel
     }
     var apiKey by remember { mutableStateOf("") }
-    var customBaseURL by remember { mutableStateOf(voiceTemplate?.baseURL ?: "") }
+    var customBaseURL by remember {
+        mutableStateOf(
+            voiceTemplate?.baseURL
+                ?: if (providerType == ProviderType.magpie) MagpieGateway.DEFAULT_BASE_URL else "",
+        )
+    }
 
     SettingsScaffold(
         title = stringResource(R.string.add_provider_configure_provider, providerType.displayName),
@@ -506,7 +521,8 @@ private fun ConfigureProviderScreen(
                 customBaseURL = customBaseURL,
                 onCustomBaseURLChange = { customBaseURL = it },
                 providerRepository = providerRepository,
-                initialAppendV1 = voiceTemplate?.appendV1,
+                initialAppendV1 = voiceTemplate?.appendV1
+                    ?: if (providerType == ProviderType.magpie) false else null,
                 onSaved = onSaved,
             )
             ProviderCredential.oauth -> OAuthConfigSection(
@@ -556,6 +572,7 @@ private fun ColumnScope.ApiKeyConfigSection(
         ProviderType.openAIResponses -> "sk-..."
         ProviderType.antigravity,
         ProviderType.unsupported -> "API Key..."
+        ProviderType.magpie -> "Magpie gateway key..."
     }
     SettingsSection(
         header = stringResource(R.string.add_provider_credential),
@@ -587,6 +604,7 @@ private fun ColumnScope.ApiKeyConfigSection(
             ProviderType.gemini -> "https://generativelanguage.googleapis.com/v1beta"
             ProviderType.anthropic -> "https://api.anthropic.com"
             ProviderType.openAI -> "https://api.openai.com"
+            ProviderType.magpie -> MagpieGateway.DEFAULT_BASE_URL
             else -> "https://api.example.com"
         }
         // T-mimo-anthropic-endpoint-android: Anthropic third-party
@@ -671,7 +689,9 @@ private fun ColumnScope.ApiKeyConfigSection(
                 label = label.ifBlank { providerType.displayName },
                 providerType = providerType,
                 credentialType = ProviderCredential.apiKey,
-                customBaseURL = trimmedBase.ifEmpty { null },
+                customBaseURL = trimmedBase.ifEmpty {
+                    if (providerType == ProviderType.magpie) MagpieGateway.DEFAULT_BASE_URL else null
+                },
                 appendV1Suffix = appendV1Suffix,
                 // Only OpenAI-family providers expose the Responses API toggle.
                 useResponsesAPI = providerType == ProviderType.openAI && useResponsesAPI,
@@ -737,6 +757,7 @@ private fun ColumnScope.OAuthConfigSection(
         ProviderType.openAIResponses -> "Sign in with OpenAI"
         ProviderType.antigravity,
         ProviderType.unsupported -> "Sign in"
+        ProviderType.magpie -> "Sign in"
     }
 
     // [T-kimi-oauth] Device-code dialog state: non-null while a Kimi login is
@@ -1043,6 +1064,7 @@ private fun ColumnScope.OAuthConfigSection(
             // /models both hang directly off it.
             ProviderType.githubCopilot -> com.openminis.app.auth.CopilotDeviceFlow.API_BASE
             ProviderType.openAIResponses -> "https://api.openai.com"
+            ProviderType.magpie -> MagpieGateway.DEFAULT_BASE_URL
             ProviderType.antigravity,
             ProviderType.unsupported -> ""
         }

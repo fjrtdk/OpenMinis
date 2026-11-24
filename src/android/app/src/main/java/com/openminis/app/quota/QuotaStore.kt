@@ -889,6 +889,7 @@ object QuotaStore {
             ProviderType.xAI -> QuotaInstanceDescriptor.ProviderKind.xAI
             ProviderType.kimiCode -> QuotaInstanceDescriptor.ProviderKind.kimiCode
             ProviderType.githubCopilot -> QuotaInstanceDescriptor.ProviderKind.githubCopilot
+            ProviderType.magpie -> QuotaInstanceDescriptor.ProviderKind.unsupported
             ProviderType.unsupported -> QuotaInstanceDescriptor.ProviderKind.unsupported
         },
         isOAuth = instance.credentialType == ProviderCredential.oauth,
@@ -906,7 +907,7 @@ object QuotaStore {
      */
     fun isOpenCodeChannel(instance: ProviderInstance): Boolean = when (instance.providerType) {
         ProviderType.openAI, ProviderType.openAIResponses, ProviderType.openRouter, ProviderType.xAI,
-        ProviderType.kimiCode, ProviderType.githubCopilot ->
+        ProviderType.kimiCode, ProviderType.githubCopilot, ProviderType.magpie ->
             com.openminis.app.provider.OpenCodeSessionHeader.matches(instance.customBaseURL)
         ProviderType.anthropic, ProviderType.gemini, ProviderType.antigravity, ProviderType.unsupported -> false
     }

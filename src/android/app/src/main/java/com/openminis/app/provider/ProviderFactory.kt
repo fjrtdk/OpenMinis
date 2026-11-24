@@ -282,6 +282,17 @@ object ProviderFactory {
             // build) whose provider Android cannot speak. Fail with a clear
             // credential error rather than constructing a provider that would
             // emit malformed requests. iOS throws FactoryError here likewise.
+            ProviderType.magpie -> {
+                // OpenAI-compatible chat at {base}/chat/completions, Bearer key.
+                // Default is MagpieGateway.DEFAULT_BASE_URL; the user can edit it.
+                val base = basePath ?: com.openminis.app.provider.magpie.MagpieGateway.DEFAULT_BASE_URL
+                OpenAIProvider(
+                    apiKey = apiKey,
+                    model = model,
+                    basePath = base,
+                    customUserAgent = instance.customUserAgent,
+                )
+            }
             ProviderType.antigravity, ProviderType.unsupported -> {
                 throw com.openminis.app.data.model.LLMError.InvalidApiKey()
             }

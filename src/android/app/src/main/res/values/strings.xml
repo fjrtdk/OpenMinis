@@ -1307,6 +1307,7 @@
     <string name="add_provider_subtitle_anthropic">Works with Claude and Anthropic-protocol-compatible services</string>
     <string name="add_provider_subtitle_gemini">Works with the Gemini series and Google AI Studio</string>
     <string name="add_provider_subtitle_openrouter">Aggregates GPT, Claude, Gemini, Llama and other mainstream models</string>
+    <string name="add_provider_subtitle_magpie">OpenAI-compatible gateway. Enter your Magpie key; the base URL is editable</string>
     <string name="add_provider_subtitle_xai">Works with the Grok series of models</string>
     <string name="add_provider_configure_provider">Configure %1$s</string>
     <string name="add_provider_auto_append_v1_quoted">Auto Append \"/v1\"</string>

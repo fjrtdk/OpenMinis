@@ -44,4 +44,13 @@
             <certificates src="system" />
         </trust-anchors>
     </domain-config>
+
+    <!-- agent-comm wake hook: the feed host is TLS only and trusts system CAs only
+         (no user CAs), regardless of the permissive base-config above. -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">acomm.rebel.army</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
 </network-security-config>

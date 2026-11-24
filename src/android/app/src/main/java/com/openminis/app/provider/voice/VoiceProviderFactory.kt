@@ -116,6 +116,7 @@ object VoiceProviderFactory {
             ProviderType.githubCopilot -> null
             // [T-android-provider-type-parity] No voice support for types this
             // build cannot drive.
+            ProviderType.magpie -> null
             ProviderType.antigravity, ProviderType.unsupported -> null
         }
     }
